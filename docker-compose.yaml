@@ -19,8 +19,44 @@ services:
       timeout: 5s
       retries: 5
 
+  ekh-minio:
+    image: minio/minio:latest
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    networks:
+      - ekh-network
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - ekh_minio_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+  ekh-minio-setup:
+    image: minio/mc:latest
+    depends_on:
+      ekh-minio:
+        condition: service_healthy
+    networks:
+      - ekh-network
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set ekh http://ekh-minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+      mc mb -p ekh/documents || true;
+      mc mb -p ekh/audit || true;
+      exit 0;
+      "
+    restart: "no"
+
 volumes:
   ekh_postgres_data:
+  ekh_minio_data:
 
 networks:
   ekh-network:

@@ -22,6 +22,7 @@ services:
     image: qdrant/qdrant:v1.16.3
     ports:
       - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
     networks:
       - ekh-network
     environment:
@@ -29,11 +30,6 @@ services:
     volumes:
       - ekh_qdrant_data:/qdrant/storage
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "awk 'NR>1 {print $2\" \"$4}' /proc/net/tcp | grep -q ':18BD 0A' || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
   ekh-minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
@@ -73,20 +69,25 @@ services:
   ekh-kafka:
     image: apache/kafka:4.0.0
     ports:
-      - "${KAFKA_PORT:-9092}:9092"
+      - "${KAFKA_DOCKER_PORT:-9092}:9092"
+      - "${KAFKA_HOST_PORT:-29092}:29092"
     networks:
       - ekh-network
     environment:
       KAFKA_NODE_ID: "1"
       KAFKA_PROCESS_ROLES: "broker,controller"
-      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@ekh-kafka:9093"
-      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093"
-      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://ekh-kafka:9092"
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_CLUSTER_ID: "${KAFKA_CLUSTER_ID}"
+
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@ekh-kafka:${KAFKA_CONTROLLER_PORT:-9093}"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:${KAFKA_DOCKER_PORT:-9092},PLAINTEXT_HOST://0.0.0.0:${KAFKA_HOST_PORT:-29092},CONTROLLER://0.0.0.0:${KAFKA_CONTROLLER_PORT:-9093}"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://ekh-kafka:${KAFKA_DOCKER_PORT:-9092},PLAINTEXT_HOST://localhost:${KAFKA_HOST_PORT:-29092}"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+
+      KAFKA_LOG_DIRS: "/tmp/kafka-logs"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
-    volumes:
-      - ekh_kafka_data:/tmp/kafka-logs
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
@@ -98,7 +99,6 @@ volumes:
   ekh_postgres_data:
   ekh_qdrant_data:
   ekh_minio_data:
-  ekh_kafka_data:
 
 networks:
   ekh-network:

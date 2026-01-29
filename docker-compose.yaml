@@ -18,6 +18,22 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  ekh-qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    networks:
+      - ekh-network
+    environment:
+      QDRANT__STORAGE__PATH: /qdrant/storage
+    volumes:
+      - ekh_qdrant_data:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   ekh-minio:
     image: minio/minio:latest
@@ -91,6 +107,7 @@ services:
 
 volumes:
   ekh_postgres_data:
+  ekh_qdrant_data:
   ekh_minio_data:
 
 networks:
